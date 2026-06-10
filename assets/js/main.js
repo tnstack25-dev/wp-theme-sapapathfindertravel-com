@@ -280,6 +280,119 @@
 
         initCategorySliders();
 
+        function initTourMediaGallery() {
+            if (typeof Swiper === 'undefined') {
+                return;
+            }
+
+            document.querySelectorAll('.tour-media-gallery').forEach(function (gallery) {
+                var main = gallery.querySelector('.tour-media-main');
+                var thumbsSlider = gallery.querySelector('.tour-media-thumbs');
+                var thumbs = Array.prototype.slice.call(gallery.querySelectorAll('.tour-media-thumb'));
+
+                if (!main || main.swiper) {
+                    return;
+                }
+
+                var thumbsSwiper = thumbsSlider ? new Swiper(thumbsSlider, {
+                    slidesPerView: 3.25,
+                    spaceBetween: 8,
+                    freeMode: true,
+                    watchSlidesProgress: true,
+                    breakpoints: {
+                        640: {
+                            slidesPerView: 4,
+                            spaceBetween: 12
+                        },
+                        1024: {
+                            slidesPerView: 5,
+                            spaceBetween: 12
+                        }
+                    }
+                }) : null;
+
+                var swiper = new Swiper(main, {
+                    slidesPerView: 1,
+                    spaceBetween: 0,
+                    speed: 450,
+                    autoHeight: false,
+                    navigation: {
+                        nextEl: gallery.querySelector('.tour-media-next'),
+                        prevEl: gallery.querySelector('.tour-media-prev')
+                    }
+                });
+
+                function setActiveThumb(index) {
+                    thumbs.forEach(function (thumb, thumbIndex) {
+                        thumb.classList.toggle('is-active', thumbIndex === index);
+                    });
+
+                    if (thumbsSwiper) {
+                        thumbsSwiper.slideTo(Math.max(0, index - 1));
+                    }
+                }
+
+                swiper.on('slideChange', function () {
+                    gallery.querySelectorAll('video').forEach(function (video) {
+                        video.pause();
+                    });
+                    setActiveThumb(swiper.activeIndex);
+                });
+
+                thumbs.forEach(function (thumb) {
+                    thumb.addEventListener('click', function () {
+                        swiper.slideTo(Number(thumb.getAttribute('data-media-index')) || 0);
+                    });
+                });
+            });
+        }
+
+        initTourMediaGallery();
+
+        function initLoopCardReveal(context) {
+            var root = context || document;
+            var cards = Array.prototype.slice.call(root.querySelectorAll('.sapa-loop-card-inner:not(.is-reveal-ready):not(.is-visible)'));
+
+            if (!cards.length) {
+                return;
+            }
+
+            if (!('IntersectionObserver' in window)) {
+                cards.forEach(function (card) {
+                    card.classList.add('is-visible');
+                });
+                return;
+            }
+
+            cards.forEach(function (card, index) {
+                card.classList.add('is-reveal-ready');
+                card.style.setProperty('--sapa-reveal-delay', Math.min(index % 8, 7) * 70 + 'ms');
+            });
+
+            var observer = new IntersectionObserver(function (entries, cardObserver) {
+                entries.forEach(function (entry) {
+                    if (!entry.isIntersecting) {
+                        return;
+                    }
+
+                    entry.target.classList.add('is-visible');
+                    cardObserver.unobserve(entry.target);
+                });
+            }, {
+                threshold: 0.16,
+                rootMargin: '0px 0px -8% 0px'
+            });
+
+            cards.forEach(function (card) {
+                observer.observe(card);
+            });
+        }
+
+        initLoopCardReveal();
+        $(document.body).on('sapa_shop_ajax_refreshed', function () {
+            initLoopCardReveal(document);
+        });
+
         function syncPriceRange($range) {
             var minBound = Number($range.data('min')) || 0;
             var maxBound = Number($range.data('max')) || 1000;

@@ -70,14 +70,259 @@ $other_useful     = $acf_get( 'other_useful_info', array() );
 $payment_policies = $acf_get( 'payment_policies', array() );
 $faqs             = $acf_get( 'faq', array() );
 $why_choose_us    = $acf_get( 'why_choose_us', array() );
-$video_embed      = $value_text( $acf_get( 'tour_video', $acf_get( 'video_url', '' ) ) );
+$video_rows       = $acf_get( 'video_tour', array() );
+
+if ( empty( $video_rows ) || ! is_array( $video_rows ) ) {
+	$legacy_video = $value_text( $acf_get( 'tour_video', $acf_get( 'video_url', '' ) ) );
+	$video_rows   = $legacy_video ? array( array( 'url_video' => $legacy_video ) ) : array();
+}
+
+$get_video_embed_url = static function ( $url ) {
+	$parts = wp_parse_url( $url );
+	$host  = isset( $parts['host'] ) ? strtolower( preg_replace( '/^www\./', '', $parts['host'] ) ) : '';
+	$path  = $parts['path'] ?? '';
+
+	if ( false !== strpos( $host, 'youtu.be' ) ) {
+		$id = trim( $path, '/' );
+		return $id ? 'https://www.youtube.com/embed/' . rawurlencode( $id ) : '';
+	}
+
+	if ( false !== strpos( $host, 'youtube.com' ) ) {
+		parse_str( $parts['query'] ?? '', $query );
+		$id = $query['v'] ?? '';
+
+		if ( ! $id && preg_match( '#/(embed|shorts)/([^/?]+)#', $path, $matches ) ) {
+			$id = $matches[2];
+		}
+
+		return $id ? 'https://www.youtube.com/embed/' . rawurlencode( $id ) : '';
+	}
+
+	if ( false !== strpos( $host, 'vimeo.com' ) && preg_match( '#/(\d+)#', $path, $matches ) ) {
+		return 'https://player.vimeo.com/video/' . rawurlencode( $matches[1] );
+	}
+
+	return '';
+};
+
+$get_video_thumbnail = static function ( $url ) {
+	$parts = wp_parse_url( $url );
+	$host  = isset( $parts['host'] ) ? strtolower( preg_replace( '/^www\./', '', $parts['host'] ) ) : '';
+	$path  = $parts['path'] ?? '';
+
+	if ( false !== strpos( $host, 'youtu.be' ) ) {
+		$id = trim( $path, '/' );
+		return $id ? 'https://img.youtube.com/vi/' . rawurlencode( $id ) . '/hqdefault.jpg' : '';
+	}
+
+	if ( false !== strpos( $host, 'youtube.com' ) ) {
+		parse_str( $parts['query'] ?? '', $query );
+		$id = $query['v'] ?? '';
+
+		if ( ! $id && preg_match( '#/(embed|shorts)/([^/?]+)#', $path, $matches ) ) {
+			$id = $matches[2];
+		}
+
+		return $id ? 'https://img.youtube.com/vi/' . rawurlencode( $id ) . '/hqdefault.jpg' : '';
+	}
+
+	return '';
+};
+
+$product_media_items = array();
+$featured_image_id   = $product->get_image_id();
+
+foreach ( $video_rows as $video_row ) {
+	$video_url = is_array( $video_row ) ? ( $video_row['url_video'] ?? '' ) : $video_row;
+	$video_url = esc_url_raw( trim( $value_text( $video_url ) ) );
+
+	if ( $video_url ) {
+		$product_media_items[] = array(
+			'type'      => 'video',
+			'url'       => $video_url,
+			'embed_url' => $get_video_embed_url( $video_url ),
+			'thumb'     => $get_video_thumbnail( $video_url ),
+			'is_file'   => (bool) preg_match( '/\.(mp4|webm|ogg)(\?.*)?$/i', $video_url ),
+		);
+	}
+}
+
+if ( $featured_image_id ) {
+	$product_media_items[] = array(
+		'type' => 'image',
+		'id'   => $featured_image_id,
+	);
+}
+
+foreach ( $product->get_gallery_image_ids() as $gallery_image_id ) {
+	if ( $gallery_image_id && $gallery_image_id !== $featured_image_id ) {
+		$product_media_items[] = array(
+			'type' => 'image',
+			'id'   => $gallery_image_id,
+		);
+	}
+}
+
+$render_media_slide = static function ( $item, $index ) {
+	if ( 'image' === $item['type'] ) {
+		echo wp_get_attachment_image(
+			$item['id'],
+			'large',
+			false,
+			array(
+				'class'   => 'tour-media-image',
+				'loading' => 0 === $index ? 'eager' : 'lazy',
+			)
+		);
+		return;
+	}
+
+	$url       = $item['url'] ?? '';
+	$embed_url = $item['embed_url'] ?? '';
+	$is_file   = ! empty( $item['is_file'] );
+	$oembed    = ! $embed_url && ! $is_file && $url ? wp_oembed_get( $url ) : '';
+
+	if ( $embed_url ) {
+		?>
+		<iframe
+			src="<?php echo esc_url( $embed_url ); ?>"
+			title="<?php echo esc_attr( sprintf( __( 'Tour video %d', 'flatsome-child' ), $index + 1 ) ); ?>"
+			loading="lazy"
+			allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+			allowfullscreen></iframe>
+		<?php
+		return;
+	}
+
+	if ( $is_file ) {
+		?>
+		<video controls preload="metadata">
+			<source src="<?php echo esc_url( $url ); ?>">
+		</video>
+		<?php
+		return;
+	}
+
+	if ( $oembed ) {
+		echo wp_kses(
+			$oembed,
+			array(
+				'iframe' => array(
+					'src'             => true,
+					'title'           => true,
+					'width'           => true,
+					'height'          => true,
+					'frameborder'     => true,
+					'allow'           => true,
+					'allowfullscreen' => true,
+					'loading'         => true,
+				),
+			)
+		);
+		return;
+	}
+	?>
+	<a class="tour-media-video-link" href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener">
+		<span><?php esc_html_e( 'Watch video', 'flatsome-child' ); ?></span>
+	</a>
+	<?php
+};
+
+$render_video_item = static function ( $url, $index ) use ( $get_video_embed_url ) {
+	$url = esc_url_raw( trim( (string) $url ) );
+
+	if ( ! $url ) {
+		return;
+	}
+
+	$embed_url = $get_video_embed_url( $url );
+	$is_file   = preg_match( '/\.(mp4|webm|ogg)(\?.*)?$/i', $url );
+	$oembed    = ! $embed_url && ! $is_file ? wp_oembed_get( $url ) : '';
+	?>
+	<div class="tour-video-item">
+		<?php if ( $embed_url ) : ?>
+			<iframe
+				src="<?php echo esc_url( $embed_url ); ?>"
+				title="<?php echo esc_attr( sprintf( __( 'Tour video %d', 'flatsome-child' ), $index + 1 ) ); ?>"
+				loading="lazy"
+				allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+				allowfullscreen></iframe>
+		<?php elseif ( $is_file ) : ?>
+			<video controls preload="metadata">
+				<source src="<?php echo esc_url( $url ); ?>">
+			</video>
+		<?php elseif ( $oembed ) : ?>
+			<?php
+			echo wp_kses(
+				$oembed,
+				array(
+					'iframe' => array(
+						'src'             => true,
+						'title'           => true,
+						'width'           => true,
+						'height'          => true,
+						'frameborder'     => true,
+						'allow'           => true,
+						'allowfullscreen' => true,
+						'loading'         => true,
+					),
+				)
+			);
+			?>
+		<?php else : ?>
+			<a class="tour-video-link" href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener">
+				<span><?php esc_html_e( 'Watch tour video', 'flatsome-child' ); ?></span>
+				<small><?php echo esc_html( preg_replace( '#^https?://#', '', $url ) ); ?></small>
+			</a>
+		<?php endif; ?>
+	</div>
+	<?php
+};
 ?>
 
 <article id="product-<?php the_ID(); ?>" <?php wc_product_class( 'tour-product-detail', $product ); ?>>
 	<div class="tour-product-shell">
 		<div class="tour-main-column">
 			<section class="tour-gallery-card">
-				<?php woocommerce_show_product_images(); ?>
+				<?php if ( ! empty( $product_media_items ) ) : ?>
+					<div class="tour-media-gallery">
+						<div class="tour-media-main swiper">
+							<div class="swiper-wrapper">
+								<?php foreach ( $product_media_items as $media_index => $media_item ) : ?>
+									<div class="swiper-slide tour-media-slide tour-media-slide-<?php echo esc_attr( $media_item['type'] ); ?>">
+										<?php $render_media_slide( $media_item, $media_index ); ?>
+									</div>
+								<?php endforeach; ?>
+							</div>
+							<button class="tour-media-nav tour-media-prev swiper-button-prev" type="button" aria-label="<?php esc_attr_e( 'Previous media', 'flatsome-child' ); ?>"></button>
+							<button class="tour-media-nav tour-media-next swiper-button-next" type="button" aria-label="<?php esc_attr_e( 'Next media', 'flatsome-child' ); ?>"></button>
+						</div>
+
+						<?php if ( count( $product_media_items ) > 1 ) : ?>
+							<div class="tour-media-thumbs swiper" aria-label="<?php esc_attr_e( 'Tour gallery thumbnails', 'flatsome-child' ); ?>">
+								<div class="swiper-wrapper">
+									<?php foreach ( $product_media_items as $media_index => $media_item ) : ?>
+										<button class="tour-media-thumb swiper-slide<?php echo 0 === $media_index ? ' is-active' : ''; ?>" type="button" data-media-index="<?php echo esc_attr( $media_index ); ?>" aria-label="<?php echo esc_attr( sprintf( __( 'View media %d', 'flatsome-child' ), $media_index + 1 ) ); ?>">
+											<?php if ( 'image' === $media_item['type'] ) : ?>
+												<?php echo wp_get_attachment_image( $media_item['id'], 'woocommerce_thumbnail' ); ?>
+											<?php elseif ( ! empty( $media_item['thumb'] ) ) : ?>
+												<img src="<?php echo esc_url( $media_item['thumb'] ); ?>" alt="" loading="lazy">
+												<span class="tour-media-play" aria-hidden="true"></span>
+											<?php else : ?>
+												<span class="tour-media-thumb-video">
+													<span class="tour-media-play" aria-hidden="true"></span>
+													<?php esc_html_e( 'Video', 'flatsome-child' ); ?>
+												</span>
+											<?php endif; ?>
+										</button>
+									<?php endforeach; ?>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				<?php else : ?>
+					<?php woocommerce_show_product_images(); ?>
+				<?php endif; ?>
 			</section>
 
 			<?php
@@ -129,12 +374,6 @@ $video_embed      = $value_text( $acf_get( 'tour_video', $acf_get( 'video_url', 
 							<?php endforeach; ?>
 						</div>
 					<?php endif; ?>
-				</section>
-			<?php endif; ?>
-
-			<?php if ( $video_embed ) : ?>
-				<section class="tour-section tour-video-section">
-					<?php echo wp_kses_post( wp_oembed_get( esc_url_raw( $video_embed ) ) ?: $video_embed ); ?>
 				</section>
 			<?php endif; ?>
 
