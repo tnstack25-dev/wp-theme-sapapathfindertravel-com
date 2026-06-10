@@ -1,0 +1,50 @@
+# EditorConfig giúp duy trì phong cách code nhất quán giữa các IDE
+# Tài liệu: https://editorconfig.org/
+
+root = true
+
+# Quy tắc chung cho tất cả file
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Quy tắc cho file PHP
+[*.php]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Quy tắc cho file HTML, XML
+[*.{html,htm,xml}]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+
+# Quy tắc cho file CSS, SCSS, LESS
+[*.{css,scss,less}]
+indent_style = space
+indent_size = 2
+
+# Quy tắc cho file JavaScript, JSON, JSX, TS
+[*.{js,jsx,ts,tsx,json}]
+indent_style = space
+indent_size = 2
+quote_type = double
+
+# Quy tắc cho file YAML
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Quy tắc cho file Markdown
+[*.md]
+trim_trailing_whitespace = false
+
+# Quy tắc cho file Makefile (phải dùng tab)
+[Makefile]
+indent_style = tab
